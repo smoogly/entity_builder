@@ -30,6 +30,12 @@ import { randomInteger } from "@lib/universal/utils/math_utils";
 import { Ctor } from "@lib/universal/framework/interfaces/types";
 import { LocalDate } from "js-joda";
 import { LocalDateColumn } from "@lib/server/domain/entities/entities_utils";
+import {
+    generateTstEntityTypes,
+    isTstRelationToMany,
+    TstEntityShape,
+    tstRelations, TstRelationType, setupTstRelation
+} from "@lib/server/framework/repositories/typeorm/db_testing_util";
 
 type ArrVal<T> = T extends Array<infer I> ? I : never;
 type Res<T> = {
@@ -1364,7 +1370,7 @@ describe("TypeORM entity builder", function() {
             const expected: Res<TargetEntity> = {
                 id: saved.id,
                 intProp: saved.intProp,
-                related: [] // TODO: this change may break things down the line (can be fixed in hydration code)
+                related: []
             };
 
             const read = await fetchEntities(connection.manager, {
@@ -1379,150 +1385,23 @@ describe("TypeORM entity builder", function() {
     });
 
     describe("Nested relation data", () => {
-        type RelationType = "owner-to-one" | "one-to-owner" | "one-to-many" | "many-to-one" | "many-to-many";
-        type Relation = RelationType | "inverse";
-        type Shape = {[prop: string]: "own" | Relation };
-
-        const inverse: {[P in RelationType]: RelationType} = {
-            "owner-to-one": "one-to-owner",
-            "one-to-owner": "owner-to-one",
-            "one-to-many": "many-to-one",
-            "many-to-one": "one-to-many",
-            "many-to-many": "many-to-many"
-        };
-
-        const generate = (shapes: {[name: string]: Shape}) => {
-            const names = Object.keys(shapes);
-            const types = names.reduce((_types, name) => {
-                class EntityType {
-                    @PrimaryGeneratedColumn()
-                    public id: number;
-                }
-
-                Object.defineProperty(EntityType, "name", { value: name });
-                Reflect.decorate([ Entity({
-                    schema,
-                    name: `tst_${name}`
-                }) ] as any, EntityType);
-
-
-                _types[name] = EntityType;
-                return _types;
-            }, {});
-
-            names.forEach(name => {
-                const EntityType = types[name];
-                const shape = shapes[name];
-
-                Object.keys(shape).forEach(prop => {
-                    const relation = shape[prop];
-                    if (relation === "own") {
-                        Reflect.decorate([ Column({ type: "int", nullable: true }) ] as any, EntityType.prototype, prop, void 0);
-                    } else {
-                        const remote = types[prop];
-                        const isInverse = relation === "inverse";
-                        const relationType: RelationType = isInverse
-                            ? inverse[(shapes[prop][name] as Relation)]
-                            : relation;
-
-                        switch (relationType) {
-                            case "owner-to-one":
-                                Reflect.decorate([
-                                    OneToOne(() => remote, (other: typeof remote) => other[name]),
-                                    JoinColumn()
-                                ] as any, EntityType.prototype, prop, void 0);
-                                Reflect.decorate([ RelationIdMarker(prop) ] as any, EntityType.prototype, `${prop}Id`, void 0);
-                                break;
-
-                            case "one-to-owner":
-                                Reflect.decorate([
-                                    OneToOne(() => remote, (other: typeof remote) => other[name])
-                                ] as any, EntityType.prototype, prop, void 0);
-                                Reflect.decorate([ RelationIdMarker(prop) ] as any, EntityType.prototype, `${prop}Id`, void 0);
-                                break;
-
-                            case "one-to-many":
-                                Reflect.decorate([
-                                    OneToMany(() => remote, (other: typeof remote) => other[name])
-                                ] as any, EntityType.prototype, prop, void 0);
-                                Reflect.decorate([ RelationIdMarker(prop) ] as any, EntityType.prototype, `${prop}Ids`, void 0);
-                                break;
-
-                            case "many-to-one":
-                                Reflect.decorate([
-                                    ManyToOne(() => remote, (other: typeof remote) => other[name])
-                                ] as any, EntityType.prototype, prop, void 0);
-                                Reflect.decorate([ RelationIdMarker(prop) ] as any, EntityType.prototype, `${prop}Id`, void 0);
-                                break;
-
-                            case "many-to-many":
-                                const decorators = [
-                                    ManyToMany(() => remote, (other: typeof remote) => other[name])
-                                ];
-                                Reflect.decorate(
-                                    isInverse ? decorators.concat([JoinTable()]) : decorators as any,
-                                    EntityType.prototype, prop, void 0
-                                );
-                                Reflect.decorate([ RelationIdMarker(prop) ] as any, EntityType.prototype, `${prop}Ids`, void 0);
-                                break;
-
-                            default:
-                                throw new Error(`Unhandled relation type ${relation}`);
-                        }
-                    }
-                });
-            });
-
-            return types as any;
-        };
-
-        const isToMany = (relation: RelationType) => relation.split("-").pop() === "many";
+        const setupRelation = (relation: TstRelationType, from: any, to: any) => setupTstRelation(connection.manager, relation, from, to);
         const pad = async (Type: Ctor<any>) => {
             const num = randomInteger(1, 5);
             for (let i = 0; i < num; i++) {
                 await connection.manager.save(new Type());
             }
         };
-        const setupRelation = (
-            relation: RelationType,
-            from: any, to: any
-        ) => {
-            switch (relation) {
-                case "owner-to-one":
-                    from[to.constructor.name] = to;
-                    return connection.manager.save(from);
 
-                case "one-to-owner":
-                    to[from.constructor.name] = from;
-                    return connection.manager.save(to);
-
-                case "many-to-one":
-                    from[to.constructor.name] = to;
-                    return connection.manager.save(from);
-
-                case "one-to-many":
-                    to[from.constructor.name] = from;
-                    return connection.manager.save(to);
-
-                case "many-to-many":
-                    from[to.constructor.name] = [to];
-                    return connection.manager.save(from);
-
-                default: throw new Error(`Unhandled relation type ${relation}`);
-            }
-        };
-
-        const relations = Object.keys(inverse) as RelationType[];
-
-        for (let i = 0; i < relations.length; i++) {
-            const rel1 = relations[i];
-            for (let j = 0; j < relations.length; j++) {
-                const rel2 = relations[j];
-                for (let k = 0; k < relations.length; k++) {
-                    const rel3 = relations[k];
+        for (let i = 0; i < tstRelations.length; i++) {
+            const rel1 = tstRelations[i];
+            for (let j = 0; j < tstRelations.length; j++) {
+                const rel2 = tstRelations[j];
+                for (let k = 0; k < tstRelations.length; k++) {
+                    const rel3 = tstRelations[k];
 
                     it(`Should correctly fetch data via ${rel1} through ${rel2} to ${rel3}`, async () => {
-                        const shapes: {[name: string]: Shape} = {
+                        const shapes: {[name: string]: TstEntityShape} = {
                             A: {
                                 aprop: "own",
                                 B: rel1
@@ -1542,7 +1421,7 @@ describe("TypeORM entity builder", function() {
                                 C: "inverse"
                             }
                         };
-                        const {A, B, C, D} = generate(shapes) as any;
+                        const {A, B, C, D} = generateTstEntityTypes(schema, shapes) as any;
 
                         await setup(A, B, C, D);
                         await [A, B, C, D].reduce(async (prev, Type) => prev.then(() => pad(Type)), Promise.resolve());
@@ -1582,15 +1461,15 @@ describe("TypeORM entity builder", function() {
                         expect(readA.id).to.eql(a.id);
                         expect(readA.aprop).to.eql(a.aprop);
 
-                        const readB = isToMany(rel1) ? readA.B[0] : readA.B;
+                        const readB = isTstRelationToMany(rel1) ? readA.B[0] : readA.B;
                         expect(readB.id).to.eql(b.id);
                         expect(readB.bprop).to.eql(b.bprop);
 
-                        const readC = isToMany(rel2) ? readB.C[0] : readB.C;
+                        const readC = isTstRelationToMany(rel2) ? readB.C[0] : readB.C;
                         expect(readC.id).to.eql(c.id);
                         expect(readC.cprop).to.eql(c.cprop);
 
-                        if (isToMany(rel3)) {
+                        if (isTstRelationToMany(rel3)) {
                             expect(readC.DIds).to.eql([d.id]);
                         } else {
                             expect(readC.DId).to.eql(d.id);
