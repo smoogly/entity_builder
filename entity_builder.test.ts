@@ -1479,4 +1479,25 @@ describe("TypeORM entity builder", function() {
             }
         }
     });
+
+    it("Should return entities in order of supplied ids", async () => {
+        @Entity({
+            schema,
+            name: "tst_target"
+        })
+        class TargetEntity {
+            @PrimaryGeneratedColumn()
+            public id?: number;
+        }
+
+        await setup(TargetEntity);
+
+        const entities = await Promise.all(Array.from(Array(3)).map(() => connection.manager.save(new TargetEntity())));
+        const reversed = [...entities].reverse();
+        const ids = reversed.concat(entities).map(e => String(e.id)); // 3, 2, 1, 1, 2, 3
+
+        const fetched = await fetchEntities(connection.manager, TargetEntity, ids);
+        expect(fetched).to.have.lengthOf(entities.length); // Dedupe
+        expect(fetched.map(e => e.id)).to.eql(reversed.map(e => e.id));
+    });
 });

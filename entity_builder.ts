@@ -2,7 +2,7 @@
 import { EntityBuilderCheckerFunctions1541678210293 } from "../../../../../migrations/1541678210293-Entity_Builder_Checker_Functions";
 
 
-import { chunk, uniq } from "lodash";
+import { chunk, uniq, sortBy } from "lodash";
 import { Driver, EntityManager, EntityMetadata, SelectQueryBuilder } from "typeorm";
 import { RelationMetadata } from "typeorm/metadata/RelationMetadata";
 import {
@@ -698,13 +698,15 @@ export const fetchEntities = (
         }
     }
 
-    const _ids = uniq(ids.map(parseFloat));
-    const execute = (em: EntityManager) => {
+    const numericIds = ids.map(parseFloat);
+    const uniqIds = uniq(numericIds);
+    const execute = async (em: EntityManager) => {
         const rootFetchNode: FetchNode<any> = isFetchNode(entity) ? entity : { type: entity };
-        return fetchNodes(em, buildQueryTree(em, rootFetchNode), _ids, onRequset || noopOnRequest);
+        const fetched = await fetchNodes(em, buildQueryTree(em, rootFetchNode), uniqIds, onRequset || noopOnRequest);
+        return sortBy(fetched, e => numericIds.indexOf(e.id)); // Preserve oreder of requested ids
     };
 
-    if (_ids.length > MAX_FN_ARGUMENTS && !(entityManager.queryRunner && entityManager.queryRunner.isTransactionActive)) {
+    if (uniqIds.length > MAX_FN_ARGUMENTS && !(entityManager.queryRunner && entityManager.queryRunner.isTransactionActive)) {
         // When large number of ids is requested, query will be batched.
         // This needs to happen in transaction
         return entityManager.transaction(execute);
