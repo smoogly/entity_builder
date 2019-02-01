@@ -1,6 +1,6 @@
 import { Ctor } from "@lib/universal/framework/interfaces/types";
 import { EntityManager } from "typeorm/entity-manager/EntityManager";
-import { DataObject } from "@lib/universal/framework/data";
+import { DataObject } from "@lib/universal/framework/data/data_object";
 
 interface SpecificEntity {
     type: Ctor<DataObject>;
