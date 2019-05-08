@@ -102,7 +102,9 @@ export const generateTstEntityTypes = (schema: string, shapes: {[name: string]: 
                         Reflect.decorate([ RelationIdMarker(prop) ] as any, EntityType.prototype, `${prop}Ids`, void 0);
                         break;
 
+
                     default:
+                        assertNever(relationType);
                         throw new Error(`Unhandled relation type ${relation}`);
                 }
             }
@@ -138,6 +140,9 @@ export const setupTstRelation = (
             from[to.constructor.name] = [to];
             return manager.save(from);
 
-        default: throw new Error(`Unhandled relation type ${relation}`);
+
+        default:
+            assertNever(relation);
+            throw new Error(`Unhandled relation type ${relation}`);
     }
 };
