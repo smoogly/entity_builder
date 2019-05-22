@@ -1,9 +1,9 @@
 import { Ctor } from "@lib/universal/framework/interfaces/types";
 import { EntityManager } from "typeorm/entity-manager/EntityManager";
-import { DataObject } from "@lib/universal/framework/data/data_object";
 
+type Entity = { id?: number }; // DB entity constructor
 interface SpecificEntity {
-    type: Ctor<DataObject>;
+    type: Ctor<Entity>;
     id: string;
 }
 
@@ -15,13 +15,13 @@ export async function setRelation(entityManager: EntityManager, from: SpecificEn
 
     if (!relation) { throw new Error(`No relation from ${ ownMeta.tableName } to ${ targetMeta.tableName }`); }
 
-    const ownEntity = await entityManager.findOne<DataObject>(ownMeta.tableName, from.id);
+    const ownEntity = await entityManager.findOne<Entity>(ownMeta.tableName, from.id);
     if (!ownEntity) { throw new Error(`${ownMeta.tableName} with id ${from.id} does not exists`); }
 
-    const targetEntity = await entityManager.findOne<DataObject>(targetMeta.tableName, to.id);
+    const targetEntity = await entityManager.findOne<Entity>(targetMeta.tableName, to.id);
     if (!targetEntity) { throw new Error(`${targetMeta.tableName} with id ${to.id} does not exists`); }
 
-    let savedEntity: DataObject;
+    let savedEntity: Entity;
     if (relation.isOwning || relation.isManyToMany) {
         const remoteIsArray = relation.isManyToMany;
         const propertyName = relation.propertyName;
