@@ -11,6 +11,7 @@ import {
     PrimaryGeneratedColumn,
     EntityManager
 } from "typeorm";
+import { assertNever } from "@lib/universal/utils/assert_never";
 
 export type TstRelationType = "owner-to-one" | "one-to-owner" | "one-to-many" | "many-to-one" | "many-to-many";
 export const isTstRelationToMany = (relation: TstRelationType) => relation.split("-").pop() === "many";
