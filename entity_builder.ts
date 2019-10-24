@@ -594,13 +594,13 @@ const fetchNodes = (
     entityManager: EntityManager,
     rootNode: QueryDataNode,
     ids: number[],
-    onRequset: () => void
+    onRequest: () => void
 ): Promise<{id: number}[]> => {
     const timerContext = `entity=${rootNode.meta.name} hash=${hashTree(rootNode)} ids=${JSON.stringify(ids)}}`;
     const runQueryTimer = new Timer(EntityBuilder_FetchNodes, timerContext);
 
     return chunk(ids, MAX_FN_ARGUMENTS).reduce((prev, idsBatch) => prev.then(prevRes => {
-        onRequset();
+        onRequest();
 
         const storedFn = storedFnName(rootNode, idsBatch);
         const checker = checkerFnName(idsBatch.length);
@@ -688,7 +688,7 @@ export const fetchEntities = (
     entityManager: EntityManager,
     entity: Ctor<any> | FetchNode<any>,
     ids: string[],
-    onRequset?: () => void
+    onRequest?: () => void
 ): Promise<{id: number}[]> => {
     if (ids.length === 0) { return Promise.resolve([]); }
     if (isDevEnv) {
@@ -702,7 +702,7 @@ export const fetchEntities = (
     const uniqIds = uniq(numericIds);
     const execute = async (em: EntityManager) => {
         const rootFetchNode: FetchNode<any> = isFetchNode(entity) ? entity : { type: entity };
-        const fetched = await fetchNodes(em, buildQueryTree(em, rootFetchNode), uniqIds, onRequset || noopOnRequest);
+        const fetched = await fetchNodes(em, buildQueryTree(em, rootFetchNode), uniqIds, onRequest || noopOnRequest);
         return sortBy(fetched, e => numericIds.indexOf(e.id)); // Preserve oreder of requested ids
     };
 
