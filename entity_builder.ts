@@ -20,7 +20,7 @@ import {
     EntityBuilder_FetchNodes,
     EntityBuilder_GenerateQuery,
     EntityBuilder_Hydrate
-} from "@lib/universal/config/apm";
+} from "@lib/server/monitoring/apm";
 import { isDevEnv } from "@lib/universal/utils/env_utils";
 import { isNotNull } from "@lib/universal/utils/check_utils";
 import { getIdPropertyName } from "@lib/server/framework/repositories/typeorm/relation_id";
