@@ -28,7 +28,7 @@ interface JunctionRelChange {
 const isLocalRelChange = (change: LocalRelChange | JunctionRelChange): change is LocalRelChange => change.type === "local";
 const isJunctionRelChange = (change: LocalRelChange | JunctionRelChange): change is JunctionRelChange => change.type === "junction";
 
-async function _setRelation(
+async function _removeRelation(
     manager: EntityManager,
     changes: ReadonlyArray<{ from: SpecificEntity, to: SpecificEntity }>
 ): Promise<void> {
@@ -101,7 +101,7 @@ async function _setRelation(
             const entity = {} as any;
             entity.id = entityChanges[0].from;
             entityChanges.forEach(change => {
-                entity[change.prop] = change.to;
+                entity[change.prop] = null;
             });
 
             return { entity, meta: entityChanges[0].meta };
@@ -122,27 +122,17 @@ async function _setRelation(
         const remoteKeyName = findBacklinkKeyFromJunction(rel, rel.inverseEntityMetadata);
 
         const tblName = rel.junctionEntityMetadata!.tableName;
-        return manager.query(
-            `INSERT INTO "${ rel.junctionEntityMetadata!.schema }"."${ tblName }" ("${ ownKeyName }", "${ remoteKeyName }") VALUES ${
-                batchedJunctionChanges.map(c => `(${ c.from }, ${ c.to })`).join(", ")
-            }`
-        );
-
-        // TODO: this is an implementation using typeorm query builder,
-        //       but it fails for relation from LegacyGroupEntity to LegacyAircraftOfInterestEntity
-        //
-        // return manager.createQueryBuilder()
-        //     .insert()
-        //     .into(tblName)
-        //     .values(batchedJunctionChanges.map(c => ({
-        //         [ownKeyName]: c.from,
-        //         [remoteKeyName]: c.to
-        //     })))
-        //     .execute();
+        return manager.createQueryBuilder(tblName, tblName)
+            .delete()
+            .where(batchedJunctionChanges.map(c => ({
+                [ownKeyName]: c.from,
+                [remoteKeyName]: c.to
+            })))
+            .execute();
     }));
 }
 
-export const setRelation: typeof _setRelation = (manager, changes) => {
-    if (manager.queryRunner && manager.queryRunner.isTransactionActive) { return _setRelation(manager, changes); }
-    return manager.transaction("REPEATABLE READ", transactionManager => _setRelation(transactionManager, changes));
+export const removeRelation: typeof _removeRelation = (manager, changes) => {
+    if (manager.queryRunner && manager.queryRunner.isTransactionActive) { return _removeRelation(manager, changes); }
+    return manager.transaction("REPEATABLE READ", transactionManager => _removeRelation(transactionManager, changes));
 };

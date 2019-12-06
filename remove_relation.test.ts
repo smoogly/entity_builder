@@ -10,12 +10,12 @@ import { createConnection } from "typeorm";
 import {
     generateTstEntityTypes,
     TstEntityShape,
-    tstRelations,
     TstRelationType
 } from "@lib/server/framework/repositories/typeorm/db_testing_util";
 import { Ctor } from "@lib/universal/framework/interfaces/types";
 import { randomInteger } from "@lib/universal/utils/math_utils";
 import { fetchEntities } from "@lib/server/framework/repositories/typeorm/entity_builder";
+import { removeRelation } from "./remove_relation";
 import { setRelation } from "./set_relation";
 
 const schema = "main"; // Must be an existing schema as typeorm doesn't create one.
@@ -117,7 +117,7 @@ describe("Typeorm set relation", function () {
         const { Origin, Target, targetInstance } = await prepare("owner-to-one");
 
         try {
-            await setRelation(connection.manager, [{
+            await removeRelation(connection.manager, [{
                 from: { type: Origin, id: "999" },
                 to: { type: Target, id: String(targetInstance.id) }
             }]);
@@ -131,7 +131,7 @@ describe("Typeorm set relation", function () {
         const { Origin, Target, originInstance } = await prepare("owner-to-one");
 
         try {
-            await setRelation(connection.manager, [{
+            await removeRelation(connection.manager, [{
                 from: { type: Origin, id: String(originInstance.id) },
                 to: { type: Target, id: "9999" }
             }]);
@@ -145,7 +145,7 @@ describe("Typeorm set relation", function () {
         const { Origin, Unrelated, originInstance, unrelatedInstance } = await prepare("owner-to-one");
 
         try {
-            await setRelation(
+            await removeRelation(
                 connection.manager,
                 [{
                     from: { type: Origin, id: String(originInstance.id) },
@@ -158,7 +158,7 @@ describe("Typeorm set relation", function () {
         }
     });
 
-    it("Should correctly set foreign keys on owner-to-one relation", async () => {
+    it("Should correctly remove foreign keys on owner-to-one relation", async () => {
         const { Origin, Target, originInstance, targetInstance } = await prepare("owner-to-one");
 
         await setRelation(
@@ -169,11 +169,19 @@ describe("Typeorm set relation", function () {
             }]
         );
 
+        await removeRelation(
+            connection.manager,
+            [{
+                from: { type: Origin, id: String(originInstance.id) },
+                to: { type: Target, id: String(targetInstance.id) }
+            }]
+        );
+
         const updatedOrigin = await fetchEntities(connection.manager, Origin, [String(originInstance.id)]);
-        expect((updatedOrigin[0] as any).TargetId).to.eql(targetInstance.id);
+        expect((updatedOrigin[0] as any).TargetId).to.eql(undefined);
     });
 
-    it("Should correctly set foreign keys on one-to-owner relation", async () => {
+    it("Should correctly remove foreign keys on one-to-owner relation", async () => {
         const { Origin, Target, originInstance, targetInstance } = await prepare("one-to-owner");
 
         await setRelation(
@@ -184,11 +192,19 @@ describe("Typeorm set relation", function () {
             }]
         );
 
+        await removeRelation(
+            connection.manager,
+            [{
+                from: { type: Origin, id: String(originInstance.id) },
+                to: { type: Target, id: String(targetInstance.id) }
+            }]
+        );
+
         const updatedOrigin = await fetchEntities(connection.manager, Origin, [String(originInstance.id)]);
-        expect((updatedOrigin[0] as any).TargetId).to.eql(targetInstance.id);
+        expect((updatedOrigin[0] as any).TargetId).to.eql(undefined);
     });
 
-    it("Should correctly set foreign keys on one-to-many relation", async () => {
+    it("Should correctly remove foreign keys on one-to-many relation", async () => {
         const { Origin, Target, originInstance, targetInstance } = await prepare("one-to-many");
 
         await setRelation(
@@ -199,8 +215,16 @@ describe("Typeorm set relation", function () {
             }]
         );
 
+        await removeRelation(
+            connection.manager,
+            [{
+                from: { type: Origin, id: String(originInstance.id) },
+                to: { type: Target, id: String(targetInstance.id) }
+            }]
+        );
+
         const updatedOrigin = await fetchEntities(connection.manager, Origin, [String(originInstance.id)]);
-        expect((updatedOrigin[0] as any).TargetIds).to.contain(targetInstance.id);
+        expect((updatedOrigin[0] as any).TargetIds).to.not.contain(targetInstance.id);
     });
 
     it("Should correctly set foreign keys on many-to-one relation", async () => {
@@ -214,8 +238,16 @@ describe("Typeorm set relation", function () {
             }]
         );
 
+        await removeRelation(
+            connection.manager,
+            [{
+                from: { type: Origin, id: String(originInstance.id) },
+                to: { type: Target, id: String(targetInstance.id) }
+            }]
+        );
+
         const updatedOrigin = await fetchEntities(connection.manager, Origin, [String(originInstance.id)]);
-        expect((updatedOrigin[0] as any).TargetId).to.eql(targetInstance.id);
+        expect((updatedOrigin[0] as any).TargetId).to.eql(undefined);
     });
 
     it("Should correctly set foreign keys on many-to-many relation", async () => {
@@ -229,23 +261,37 @@ describe("Typeorm set relation", function () {
             }]
         );
 
-        const updatedOrigin = await fetchEntities(connection.manager, Origin, [String(originInstance.id)]);
-        expect((updatedOrigin[0] as any).TargetIds).to.contain(targetInstance.id);
-    });
-
-    it("Should not remove existing relations of a many-to-many", async () => {
-        const { Origin, Target, originInstance, targetInstance } = await prepare("many-to-many");
-
-        const otherTargetId = targetInstance.id - 1;
-        await setRelation(
+        await removeRelation(
             connection.manager,
             [{
                 from: { type: Origin, id: String(originInstance.id) },
-                to: { type: Target, id: String(otherTargetId) }
+                to: { type: Target, id: String(targetInstance.id) }
             }]
         );
 
+        const updatedOrigin = await fetchEntities(connection.manager, Origin, [String(originInstance.id)]);
+        expect((updatedOrigin[0] as any).TargetIds).to.not.contain(targetInstance.id);
+    });
+
+    it("Should not remove unspecified relation when unsetting a many-to-many", async () => {
+        const { Origin, Target, originInstance, targetInstance } = await prepare("many-to-many");
+        const otherTargetId = targetInstance.id - 1;
+
         await setRelation(
+            connection.manager,
+            [
+                {
+                    from: { type: Origin, id: String(originInstance.id) },
+                    to: { type: Target, id: String(otherTargetId) }
+                },
+                {
+                    from: { type: Origin, id: String(originInstance.id) },
+                    to: { type: Target, id: String(targetInstance.id) }
+                }
+            ]
+        );
+
+        await removeRelation(
             connection.manager,
             [{
                 from: { type: Origin, id: String(originInstance.id) },
@@ -255,28 +301,5 @@ describe("Typeorm set relation", function () {
 
         const updatedOrigin = await fetchEntities(connection.manager, Origin, [String(originInstance.id)]);
         expect((updatedOrigin[0] as any).TargetIds).to.contain(otherTargetId);
-    });
-
-    tstRelations.forEach(rel => {
-        it(`Should not create additional entities when setting up a ${ rel } relation`, async () => {
-            const { Origin, Target, originInstance, targetInstance } = await prepare(rel);
-
-            const initialNumOrigin = await connection.manager.count(Origin);
-            const initialNumTarget = await connection.manager.count(Target);
-
-            await setRelation(
-                connection.manager,
-                [{
-                    from: { type: Origin, id: String(originInstance.id) },
-                    to: { type: Target, id: String(targetInstance.id) }
-                }]
-            );
-
-            const updatedNumOrigin = await connection.manager.count(Origin);
-            const updatedNumTarget = await connection.manager.count(Target);
-
-            expect(updatedNumOrigin).to.eql(initialNumOrigin);
-            expect(updatedNumTarget).to.eql(initialNumTarget);
-        });
     });
 });
